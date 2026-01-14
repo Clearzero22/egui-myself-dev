@@ -53,6 +53,8 @@ fn main() {
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
+            .with_decorations(false) // 去除操作系统的表标题栏、边框
+            .with_transparent(true) // 启用透明支持圆角
             .with_inner_size([1280.0, 1024.0])
             .with_drag_and_drop(true),
 

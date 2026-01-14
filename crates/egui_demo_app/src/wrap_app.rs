@@ -262,13 +262,8 @@ impl eframe::App for WrapApp {
     }
 
     fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
-        // Give the area behind the floating windows a different color, because it looks better:
-        let color = egui::lerp(
-            egui::Rgba::from(visuals.panel_fill)..=egui::Rgba::from(visuals.extreme_bg_color),
-            0.5,
-        );
-        let color = egui::Color32::from(color);
-        color.to_normalized_gamma_f32()
+        // 使用透明背景以支持无边框窗口的圆角效果
+        egui::Rgba::TRANSPARENT.to_array()
     }
 
     fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
@@ -291,23 +286,98 @@ impl eframe::App for WrapApp {
         }
 
         let mut cmd = Command::Nothing;
-        egui::Panel::top("wrap_app_top_bar")
-            .frame(egui::Frame::new().inner_margin(4))
-            .show(ctx, |ui| {
-                ui.horizontal_wrapped(|ui| {
+
+        // 自定义窗口框架 - 暖黄色主题
+        let panel_frame = egui::Frame::new()
+            .fill(egui::Color32::from_rgb(249, 243, 224))  // 主背景色 #F9F3E0
+            .corner_radius(12)
+            .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(224, 213, 184)))  // 边框色 #E0D5B8
+            .inner_margin(4)
+            .outer_margin(2);
+
+        egui::CentralPanel::default().frame(panel_frame).show(ctx, |ui| {
+            // 顶部栏 - 支持拖拽窗口，使用稍深的暖黄色
+            let title_bar_frame = egui::Frame::new()
+                .fill(egui::Color32::from_rgb(245, 233, 200))  // 标签栏背景色 #F5E9C8
+                .inner_margin(egui::Margin::symmetric(8, 8));
+
+            let _title_bar_inner = title_bar_frame.show(ui, |ui| {
+                // 先绘制内容，让按钮先注册它们的交互
+                ui.horizontal(|ui| {
                     ui.visuals_mut().button_frame = false;
                     self.bar_contents(ui, frame, &mut cmd);
                 });
+
+                // 获取标题栏区域的矩形
+                let title_bar_rect = ui.min_rect();
+
+                // 检测鼠标按下位置和当前位置来判断拖拽
+                let (press_origin, current_pos) = ui.input(|i| {
+                    (i.pointer.press_origin(), i.pointer.interact_pos())
+                });
+
+                if let (Some(origin), Some(current)) = (press_origin, current_pos) {
+                    // 如果按下位置在标题栏区域内
+                    if title_bar_rect.contains(origin) {
+                        // 计算移动距离
+                        let delta = (current - origin).length();
+
+                        // 如果移动距离超过阈值，开始拖拽窗口
+                        if delta > 3.0 && ui.input(|i| i.pointer.primary_down()) {
+                            ctx.send_viewport_cmd(egui::ViewportCommand::StartDrag);
+                        }
+                    }
+                }
+
+                // 检测双击最大化/还原
+                let double_click = ui.input(|i| i.pointer.button_double_clicked(egui::PointerButton::Primary));
+                if double_click {
+                    let pointer_pos = ui.input(|i| i.pointer.interact_pos());
+                    if let Some(pos) = pointer_pos {
+                        if title_bar_rect.contains(pos) {
+                            let is_maximized = ui.input(|i| i.viewport().maximized.unwrap_or(false));
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(!is_maximized));
+                        }
+                    }
+                }
             });
 
-        self.state.backend_panel.update(ctx, frame);
+            // 添加分隔线，使用边框色
+            ui.add_space(4.0);
+            let separator_rect = ui.available_rect_before_wrap();
+            let painter = ui.painter();
+            painter.line_segment(
+                [separator_rect.left_top(), separator_rect.right_top()],
+                egui::Stroke::new(1.0, egui::Color32::from_rgb(224, 213, 184)),  // 边框色 #E0D5B8
+            );
+            ui.add_space(4.0);
 
-        egui::CentralPanel::no_frame().show(ctx, |ui| {
+            self.state.backend_panel.update(ctx, frame);
+
+            // 内容区域
             if !is_mobile(ctx) {
-                cmd = self.backend_panel(ui, frame);
-            }
+                ui.horizontal(|ui| {
+                    if self.state.backend_panel.open || ui.memory(|mem| mem.everything_is_visible()) {
+                        // 左侧后端面板区域
+                        ui.vertical(|ui| {
+                            ui.add_space(4.0);
+                            ui.vertical_centered(|ui| {
+                                ui.heading("💻 Backend");
+                            });
+                            ui.separator();
+                            self.backend_panel_contents(ui, frame, &mut cmd);
+                        });
+                        ui.separator();
+                    }
 
-            self.show_selected_app(ui, frame);
+                    // 主内容区域
+                    ui.vertical(|ui| {
+                        self.show_selected_app(ui, frame);
+                    });
+                });
+            } else {
+                self.show_selected_app(ui, frame);
+            }
         });
 
         self.state.backend_panel.end_of_frame(ctx);
@@ -331,28 +401,6 @@ impl eframe::App for WrapApp {
 }
 
 impl WrapApp {
-    fn backend_panel(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) -> Command {
-        // The backend-panel can be toggled on/off.
-        // We show a little animation when the user switches it.
-        let is_open = self.state.backend_panel.open || ui.memory(|mem| mem.everything_is_visible());
-
-        let mut cmd = Command::Nothing;
-
-        egui::Panel::left("backend_panel")
-            .resizable(false)
-            .show_animated_inside(ui, is_open, |ui| {
-                ui.add_space(4.0);
-                ui.vertical_centered(|ui| {
-                    ui.heading("💻 Backend");
-                });
-
-                ui.separator();
-                self.backend_panel_contents(ui, frame, &mut cmd);
-            });
-
-        cmd
-    }
-
     fn run_cmd(&mut self, ctx: &egui::Context, cmd: Command) {
         match cmd {
             Command::Nothing => {}
@@ -400,6 +448,11 @@ impl WrapApp {
     }
 
     fn bar_contents(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame, cmd: &mut Command) {
+        // 窗口控制按钮 (关闭、最小化、最大化)
+        self.window_controls(ui);
+
+        ui.separator();
+
         egui::widgets::global_theme_preference_switch(ui);
 
         ui.separator();
@@ -443,6 +496,62 @@ impl WrapApp {
 
             egui::warn_if_debug_build(ui);
         });
+    }
+
+    /// 窗口控制按钮：关闭、最小化、最大化
+    fn window_controls(&self, ui: &mut egui::Ui) {
+        use egui::{Button, RichText};
+
+        ui.spacing_mut().item_spacing.x = 0.0;
+        ui.visuals_mut().button_frame = false;
+
+        let button_size = egui::Vec2::new(32.0, 32.0);
+
+        // 关闭按钮
+        let close_response = ui
+            .add_sized(
+                button_size,
+                Button::new(RichText::new("❌").size(14.0))
+            )
+            .on_hover_text("关闭窗口");
+        if close_response.clicked() {
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+
+        // 最小化按钮
+        let minimize_response = ui
+            .add_sized(
+                button_size,
+                Button::new(RichText::new("🗕").size(14.0))
+            )
+            .on_hover_text("最小化");
+        if minimize_response.clicked() {
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+        }
+
+        // 最大化/还原按钮
+        let is_maximized = ui.input(|i| i.viewport().maximized.unwrap_or(false));
+        if is_maximized {
+            let restore_response = ui
+                .add_sized(
+                    button_size,
+                    Button::new(RichText::new("🗗").size(14.0))
+                )
+                .on_hover_text("还原");
+            if restore_response.clicked() {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(false));
+            }
+        } else {
+            let maximize_response = ui
+                .add_sized(
+                    button_size,
+                    Button::new(RichText::new("🗗").size(14.0))
+                )
+                .on_hover_text("最大化");
+            if maximize_response.clicked() {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Maximized(true));
+            }
+        }
     }
 
     fn ui_file_drag_and_drop(&mut self, ctx: &egui::Context) {
