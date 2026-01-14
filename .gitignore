@@ -9,3 +9,9 @@
 /.vscode
 /media/*
 .idea/
+
+# IDE configuration
+.marscode/
+*.swp
+*.swo
+*~
