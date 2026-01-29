@@ -34,10 +34,15 @@ serde = ["egui/serde", "dep:serde", "egui_extras/serde"]
 ## Enable better syntax highlighting using [`syntect`](https://docs.rs/syntect).
 syntect = ["egui_extras/syntect"]
 
+## Enable clipboard access using [`arboard`](https://docs.rs/arboard).
+arboard = ["dep:arboard"]
+
 
 [dependencies]
 egui = { workspace = true, default-features = false, features = ["color-hex"] }
 egui_extras = { workspace = true, features = ["image", "svg"] }
+
+arboard = { version = "3.6", default-features = false, optional = true }
 
 unicode_names2.workspace = true # this old version has fewer dependencies
 
