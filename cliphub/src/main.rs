@@ -2,6 +2,8 @@ use eframe::egui;
 
 mod types;
 use types::ClipboardItem;
+mod storage;
+use storage::Database;
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
