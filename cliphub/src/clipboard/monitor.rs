@@ -1,6 +1,7 @@
 use arboard::Clipboard;
 use std::time::Duration;
 use tokio::time::interval;
+use std::sync::mpsc;
 use crate::types::ClipboardItem;
 use crate::clipboard::detector::detect_content_type;
 use crate::storage::Database;
@@ -45,6 +46,44 @@ impl ClipboardMonitor {
 
                     if let Ok(id) = db.insert_item(&item) {
                         println!("Captured clipboard item: {}", id);
+                    }
+
+                    self.last_content = content;
+                }
+            }
+        }
+    }
+
+    pub async fn run_with_channel(&mut self, db: &Database, sender: mpsc::Sender<ClipboardItem>) -> Result<()> {
+        let mut timer = interval(self.interval);
+        let mut clipboard = Clipboard::new()?;
+
+        loop {
+            timer.tick().await;
+
+            if let Ok(content) = clipboard.get_text() {
+                if content != self.last_content && !content.is_empty() {
+                    let detection = detect_content_type(&content);
+
+                    let item = ClipboardItem {
+                        id: None,
+                        content_type: detection.content_type.clone(),
+                        title: generate_title(&content, &detection),
+                        content: content.clone(),
+                        source_app: detect_source_app(),
+                        created_at: Utc::now(),
+                        is_synced: false,
+                        sync_targets: Vec::new(),
+                        tags: Vec::new(),
+                    };
+
+                    if let Ok(id) = db.insert_item(&item) {
+                        println!("Captured clipboard item: {}", id);
+
+                        // Send item through channel
+                        let mut item_with_id = item.clone();
+                        item_with_id.id = Some(id);
+                        let _ = sender.send(item_with_id);
                     }
 
                     self.last_content = content;
