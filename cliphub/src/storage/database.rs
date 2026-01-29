@@ -84,13 +84,12 @@ impl Database {
     }
 }
 
-#[cfg(test)]
 impl Database {
-    pub fn table_exists(&self, table_name: &str) -> bool {
+    pub fn table_exists(&self, name: &str) -> bool {
         let mut stmt = self.conn.prepare(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1"
+            "SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table', 'index') AND name=?1"
         ).unwrap();
-        let count: i64 = stmt.query_row([table_name], |row| row.get(0)).unwrap();
+        let count: i64 = stmt.query_row([name], |row| row.get(0)).unwrap();
         count > 0
     }
 }
