@@ -115,7 +115,7 @@ impl Database {
 
     pub fn get_recent_items(&self, limit: usize) -> Result<Vec<ClipboardItem>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, content_type, title, content, source_app, created_at, sync_targets, tags
+            "SELECT id, content_type, title, content, source_app, created_at, is_synced, sync_targets, tags
              FROM clipboard_items
              WHERE is_deleted = 0
              ORDER BY created_at DESC
@@ -128,13 +128,14 @@ impl Database {
 
             let created_at_str: String = row.get(5)?;
             let created_at = chrono::DateTime::parse_from_rfc3339(&created_at_str)
-                .unwrap()
+                .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?
                 .with_timezone(&Utc);
 
-            let sync_targets_str: String = row.get(6)?;
+            let is_synced: bool = row.get(6)?;
+            let sync_targets_str: String = row.get(7)?;
             let sync_targets = serde_json::from_str(&sync_targets_str).unwrap_or_default();
 
-            let tags_str: String = row.get(7)?;
+            let tags_str: String = row.get(8)?;
             let tags = serde_json::from_str(&tags_str).unwrap_or_default();
 
             Ok(ClipboardItem {
@@ -144,7 +145,7 @@ impl Database {
                 content: row.get(3)?,
                 source_app: row.get(4)?,
                 created_at,
-                is_synced: false,
+                is_synced,
                 sync_targets,
                 tags,
             })
