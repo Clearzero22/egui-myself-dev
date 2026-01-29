@@ -1,5 +1,8 @@
 use eframe::egui;
 
+mod types;
+use types::ClipboardItem;
+
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
