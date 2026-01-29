@@ -5,6 +5,7 @@
 // ----------------------------------------------------------------------------
 
 pub mod about;
+pub mod clipboard_history;
 pub mod code_editor;
 pub mod code_example;
 pub mod dancing_strings;
@@ -18,6 +19,7 @@ pub mod interactive_container;
 pub mod misc_demo_window;
 pub mod modals;
 pub mod multi_touch;
+pub mod my_demo;
 pub mod paint_bezier;
 pub mod painting;
 pub mod panels;
