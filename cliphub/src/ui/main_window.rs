@@ -6,6 +6,7 @@ pub struct MainWindow {
     search_query: String,
     selected_index: Option<usize>,
     db: Database,
+    errors: Vec<String>,
 }
 
 impl MainWindow {
@@ -17,6 +18,7 @@ impl MainWindow {
             search_query: String::new(),
             selected_index: None,
             db,
+            errors: Vec::new(),
         }
     }
 
@@ -25,6 +27,21 @@ impl MainWindow {
     }
 
     pub fn show(&mut self, ctx: &egui::Context) {
+        // Show errors if any
+        if !self.errors.is_empty() {
+            egui::Window::new("Errors")
+                .collapsible(false)
+                .resizable(false)
+                .show(ctx, |ui| {
+                    for error in &self.errors {
+                        ui.colored_label(egui::Color32::RED, error);
+                    }
+                    if ui.button("Dismiss").clicked() {
+                        self.errors.clear();
+                    }
+                });
+        }
+
         egui::TopBottomPanel::top("header").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("📋 ClipHub");
