@@ -1,6 +1,8 @@
 use rusqlite::Connection;
 use anyhow::Result;
 use std::path::Path;
+use crate::types::{ClipboardItem, ContentType};
+use chrono::Utc;
 
 pub struct Database {
     conn: Connection,
@@ -81,6 +83,87 @@ impl Database {
         )?;
 
         Ok(())
+    }
+
+    pub fn insert_item(&self, item: &ClipboardItem) -> Result<i64> {
+        let content_type = match &item.content_type {
+            ContentType::Text => "text".to_string(),
+            ContentType::Code { language } => format!("code:{}", language),
+            ContentType::Image { path, .. } => format!("image:{}", path),
+            ContentType::Url { url, .. } => format!("url:{}", url),
+        };
+
+        let sync_targets = serde_json::to_string(&item.sync_targets)?;
+        let tags = serde_json::to_string(&item.tags)?;
+
+        self.conn.execute(
+            "INSERT INTO clipboard_items (content_type, title, content, source_app, created_at, sync_targets, tags)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            (
+                &content_type,
+                item.title.as_deref(),
+                &item.content,
+                item.source_app.as_deref(),
+                &item.created_at.to_rfc3339(),
+                &sync_targets,
+                &tags,
+            ),
+        )?;
+
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn get_recent_items(&self, limit: usize) -> Result<Vec<ClipboardItem>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, content_type, title, content, source_app, created_at, sync_targets, tags
+             FROM clipboard_items
+             WHERE is_deleted = 0
+             ORDER BY created_at DESC
+             LIMIT ?1"
+        )?;
+
+        let items = stmt.query_map([limit as i64], |row| {
+            let content_type_str: String = row.get(1)?;
+            let content_type = Self::parse_content_type(&content_type_str);
+
+            let created_at_str: String = row.get(5)?;
+            let created_at = chrono::DateTime::parse_from_rfc3339(&created_at_str)
+                .unwrap()
+                .with_timezone(&Utc);
+
+            let sync_targets_str: String = row.get(6)?;
+            let sync_targets = serde_json::from_str(&sync_targets_str).unwrap_or_default();
+
+            let tags_str: String = row.get(7)?;
+            let tags = serde_json::from_str(&tags_str).unwrap_or_default();
+
+            Ok(ClipboardItem {
+                id: Some(row.get(0)?),
+                content_type,
+                title: row.get(2)?,
+                content: row.get(3)?,
+                source_app: row.get(4)?,
+                created_at,
+                is_synced: false,
+                sync_targets,
+                tags,
+            })
+        })?;
+
+        items.collect::<Result<Vec<ClipboardItem>, rusqlite::Error>>()
+            .map_err(|e| e.into())
+    }
+
+    fn parse_content_type(s: &str) -> ContentType {
+        if let Some(rest) = s.strip_prefix("code:") {
+            ContentType::Code { language: rest.to_string() }
+        } else if let Some(rest) = s.strip_prefix("image:") {
+            ContentType::Image { path: rest.to_string(), width: 0, height: 0 }
+        } else if let Some(rest) = s.strip_prefix("url:") {
+            ContentType::Url { url: rest.to_string(), title: None }
+        } else {
+            ContentType::Text
+        }
     }
 }
 
