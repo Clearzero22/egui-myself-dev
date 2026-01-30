@@ -5,6 +5,16 @@
 
 use crate::demo::clipboard_history::core::item::ClipboardItem;
 use crate::demo::clipboard_history::core::item::ContentType;
+use egui::Widget; // For .ui() method on Image
+use std::collections::HashMap;
+
+/// Unique ID for storing image textures per item.
+///
+/// Each clipboard item with image data gets a unique texture ID
+/// based on its timestamp, allowing the texture to be cached and reused.
+fn image_texture_id(item: &ClipboardItem) -> String {
+    format!("clipboard_img_{}", item.timestamp)
+}
 
 /// Action that can be performed on an item card.
 #[derive(Clone, Debug)]
@@ -60,6 +70,7 @@ impl ItemCardRenderer {
     /// * `item` - The clipboard item to render
     /// * `index` - The index of the item (used for edit/delete actions)
     /// * `actions` - A vector to collect any triggered actions
+    /// * `texture_cache` - A cache for image textures to avoid reloading
     ///
     /// # Examples
     ///
@@ -67,11 +78,17 @@ impl ItemCardRenderer {
     /// # use egui::Ui;
     /// # use clipboard_history::ui::card::{ItemCardRenderer, CardAction};
     /// # use clipboard_history::core::item::ClipboardItem;
+    /// # use std::collections::HashMap;
     ///
-    /// fn render_item(ui: &mut egui::Ui, item: &ClipboardItem, index: usize) -> Vec<CardAction> {
+    /// fn render_item(
+    ///     ui: &mut egui::Ui,
+    ///     item: &ClipboardItem,
+    ///     index: usize,
+    ///     texture_cache: &mut HashMap<String, egui::TextureHandle>
+    /// ) -> Vec<CardAction> {
     ///     let mut actions = Vec::new();
     ///     let renderer = ItemCardRenderer::new();
-    ///     renderer.render(ui, item, index, &mut actions);
+    ///     renderer.render(ui, item, index, &mut actions, texture_cache);
     ///     actions
     /// }
     /// ```
@@ -81,12 +98,13 @@ impl ItemCardRenderer {
         item: &ClipboardItem,
         index: usize,
         actions: &mut Vec<CardAction>,
+        texture_cache: &mut HashMap<String, egui::TextureHandle>,
     ) {
         egui::Frame::NONE
             .inner_margin(egui::Margin::symmetric(8, 4))
             .show(ui, |ui| {
                 self.render_title_row(ui, item);
-                self.render_content_preview(ui, item);
+                self.render_content_preview(ui, item, texture_cache);
                 ui.separator();
                 self.render_action_buttons(ui, item, index, actions);
             });
@@ -105,32 +123,98 @@ impl ItemCardRenderer {
     }
 
     /// Render just the content preview of an item card.
-    pub fn render_content_preview(&self, ui: &mut egui::Ui, item: &ClipboardItem) {
+    pub fn render_content_preview(
+        &self,
+        ui: &mut egui::Ui,
+        item: &ClipboardItem,
+        texture_cache: &mut HashMap<String, egui::TextureHandle>,
+    ) {
         // If this is an image, show a visual indicator
         if item.content_type == ContentType::Image {
-            // Show image icon and metadata
-            ui.horizontal(|ui| {
-                // Image icon (large)
-                ui.label(egui::RichText::new("🖼️").size(24.0));
-
-                // Image info
-                ui.vertical(|ui| {
-                    ui.label(egui::RichText::new(&item.title).strong());
-
-                    // Show file size if available
-                    if let Some(ref data) = item.image_data {
-                        let size_kb = data.len() / 1024;
-                        ui.label(egui::RichText::new(format!("{} KB", size_kb)).small().weak());
-                    }
-
-                    ui.label(egui::RichText::new(&item.content).small().weak());
-                });
-            });
+            // Try to load and display the actual image
+            if let Some(ref png_bytes) = item.image_data {
+                self.render_image_thumbnail(ui, item, png_bytes, texture_cache);
+            } else {
+                // Fallback: show image icon and metadata only
+                self.render_image_metadata(ui, item);
+            }
         } else {
             // For text items, show text preview
             let preview = item.preview(100);
             ui.label(egui::RichText::new(preview).small().weak());
         }
+    }
+
+    /// Render an actual image thumbnail from PNG bytes.
+    fn render_image_thumbnail(
+        &self,
+        ui: &mut egui::Ui,
+        item: &ClipboardItem,
+        png_bytes: &[u8],
+        texture_cache: &mut HashMap<String, egui::TextureHandle>,
+    ) {
+        let texture_id = image_texture_id(item);
+
+        // Check cache first - only decode and load texture if not cached
+        let texture = texture_cache.entry(texture_id.clone()).or_insert_with(|| {
+            // Decode the PNG using egui_extras
+            match egui_extras::image::load_image_bytes(png_bytes) {
+                Ok(color_image) => {
+                    ui.ctx().load_texture(
+                        texture_id,
+                        color_image,
+                        egui::TextureOptions::LINEAR,
+                    )
+                }
+                Err(_) => {
+                    // Create a fallback error texture
+                    let size = [1, 1];
+                    let pixels = vec![egui::Color32::RED];
+                    let color_image = egui::ColorImage::new(size, pixels);
+                    ui.ctx().load_texture(
+                        format!("{}_error", texture_id),
+                        color_image,
+                        egui::TextureOptions::LINEAR,
+                    )
+                }
+            }
+        });
+
+        // Get image dimensions from texture
+        let size = texture.size_vec2();
+
+        // Display the image thumbnail
+        ui.horizontal(|ui| {
+            // Show thumbnail with max height of 80px, maintaining aspect ratio
+            egui::Image::new(&*texture)
+                .max_height(80.0)
+                .maintain_aspect_ratio(true)
+                .shrink_to_fit()
+                .ui(ui);
+
+            // Image info next to thumbnail
+            ui.vertical(|ui| {
+                ui.label(egui::RichText::new(&item.title).strong());
+
+                let size_kb = png_bytes.len() / 1024;
+                ui.label(
+                    egui::RichText::new(format!("{} × {} · {} KB", size.x as usize, size.y as usize, size_kb))
+                        .small()
+                        .weak(),
+                );
+            });
+        });
+    }
+
+    /// Fallback: render image metadata when image data is not available.
+    fn render_image_metadata(&self, ui: &mut egui::Ui, item: &ClipboardItem) {
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("🖼️").size(24.0));
+            ui.vertical(|ui| {
+                ui.label(egui::RichText::new(&item.title).strong());
+                ui.label(egui::RichText::new(&item.content).small().weak());
+            });
+        });
     }
 
     /// Render just the action buttons of an item card.

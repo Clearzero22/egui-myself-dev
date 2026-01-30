@@ -5,6 +5,7 @@
 
 use std::sync::{Arc, Mutex};
 use super::backend::{Backend, ClipboardContent};
+use image::ImageEncoder;
 
 /// arboard-based clipboard backend.
 ///
@@ -95,7 +96,8 @@ impl ArboardBackend {
 
     /// Get image data from clipboard.
     ///
-    /// Returns `(width, height, bytes)` if the clipboard contains an image.
+    /// Returns `(width, height, png_bytes)` if the clipboard contains an image.
+    /// The bytes are PNG-encoded image data.
     /// Returns `None` if the clipboard doesn't contain an image or is inaccessible.
     ///
     /// # Examples
@@ -104,16 +106,45 @@ impl ArboardBackend {
     /// use clipboard_history::clipboard::arboard::ArboardBackend;
     ///
     /// let backend = ArboardBackend::new();
-    /// if let Some((width, height, bytes)) = backend.get_image() {
-    ///     println!("Clipboard contains image: {}x{} ({} bytes)", width, height, bytes.len());
+    /// if let Some((width, height, png_bytes)) = backend.get_image() {
+    ///     println!("Clipboard contains image: {}x{} ({} bytes)", width, height, png_bytes.len());
     /// }
     /// ```
     pub fn get_image(&self) -> Option<(u32, u32, Vec<u8>)> {
-        let image = arboard::Clipboard::new()
-            .ok()?
-            .get_image()
-            .ok()?;
-        Some((image.width as u32, image.height as u32, image.bytes.to_vec()))
+        let mut clipboard = arboard::Clipboard::new().ok()?;
+        let image_result = clipboard.get_image();
+
+        if let Ok(img) = image_result {
+            println!("[DEBUG arboard] Got image: {}x{}, {} bytes (raw RGBA)", img.width, img.height, img.bytes.len());
+
+            // Convert RGBA bytes to PNG format
+            // arboard returns raw RGBA pixels, need to encode as PNG
+            let rgba_image = image::RgbaImage::from_raw(
+                img.width as u32,
+                img.height as u32,
+                img.bytes.to_vec(),
+            )?;
+
+            // Encode as PNG
+            let mut png_bytes = Vec::new();
+            if let Err(e) = image::codecs::png::PngEncoder::new(&mut png_bytes)
+                .write_image(
+                    rgba_image.as_raw(),
+                    rgba_image.width(),
+                    rgba_image.height(),
+                    image::ExtendedColorType::Rgba8,
+                )
+            {
+                println!("[DEBUG arboard] Failed to encode PNG: {:?}", e);
+                return None;
+            }
+
+            println!("[DEBUG arboard] Encoded PNG: {} bytes", png_bytes.len());
+            Some((img.width as u32, img.height as u32, png_bytes))
+        } else {
+            println!("[DEBUG arboard] Failed to get image: {:?}", image_result.err());
+            None
+        }
     }
 
     /// Check if the given text content is new (different from last seen).

@@ -28,6 +28,10 @@ pub mod ui;
 use core::{Store, MemoryStore, ContentType};
 use clipboard::{ArboardBackend, Backend};
 use ui::{DialogManager, ItemCardRenderer, CardAction};
+use std::collections::HashMap;
+
+#[cfg(feature = "persistence")]
+use core::SqliteStore;
 
 /// Filter mode for the UI.
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
@@ -73,7 +77,11 @@ impl FilterMode {
 /// ```
 pub struct ClipboardHistory {
     /// Storage for clipboard items
+    #[cfg(not(feature = "persistence"))]
     store: MemoryStore,
+    /// Storage for clipboard items (persistent)
+    #[cfg(feature = "persistence")]
+    store: SqliteStore,
     /// Clipboard backend
     clipboard: ArboardBackend,
     /// Search query string
@@ -88,6 +96,8 @@ pub struct ClipboardHistory {
     dialogs: DialogManager,
     /// Pending actions from item cards
     pending_actions: Vec<CardAction>,
+    /// Texture cache for images (texture_id -> TextureHandle)
+    texture_cache: HashMap<String, egui::TextureHandle>,
 }
 
 impl ClipboardHistory {
@@ -100,6 +110,7 @@ impl ClipboardHistory {
     ///
     /// let app = ClipboardHistory::new();
     /// ```
+    #[cfg(not(feature = "persistence"))]
     pub fn new() -> Self {
         Self {
             store: MemoryStore::new(),
@@ -110,6 +121,35 @@ impl ClipboardHistory {
             auto_capture: true,
             dialogs: DialogManager::new(),
             pending_actions: Vec::new(),
+            texture_cache: HashMap::new(),
+        }
+    }
+
+    /// Create a new [`ClipboardHistory`] with persistent storage.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use egui_demo_lib::demo::clipboard_history::ClipboardHistory;
+    ///
+    /// let app = ClipboardHistory::new();
+    /// ```
+    #[cfg(feature = "persistence")]
+    pub fn new() -> Self {
+        Self {
+            store: SqliteStore::new().unwrap_or_else(|e| {
+                eprintln!("Failed to initialize persistent storage, using memory: {}", e);
+                // Fallback to in-memory if SQLite fails
+                panic!("Failed to initialize SqliteStore: {}", e);
+            }),
+            clipboard: ArboardBackend::new(),
+            search_query: String::default(),
+            filter_mode: FilterMode::default(),
+            selected_index: None,
+            auto_capture: true,
+            dialogs: DialogManager::new(),
+            pending_actions: Vec::new(),
+            texture_cache: HashMap::new(),
         }
     }
 
@@ -121,7 +161,9 @@ impl ClipboardHistory {
 
     /// Add a clipboard item from image data.
     fn add_image_item(&mut self, width: u32, height: u32, bytes: Vec<u8>) {
+        println!("[DEBUG] Adding image: {}x{}, {} bytes", width, height, bytes.len());
         let item = core::ClipboardItem::from_image(width, height, bytes);
+        println!("[DEBUG] Item image_data.is_some(): {}", item.image_data.is_some());
         let _ = self.store.add(item);
     }
 
@@ -348,7 +390,13 @@ impl ClipboardHistory {
                         egui::Frame::NONE
                             .fill(fill)
                             .show(ui, |ui| {
-                                card_renderer.render(ui, &item, idx, &mut self.pending_actions);
+                                card_renderer.render(
+                                    ui,
+                                    &item,
+                                    idx,
+                                    &mut self.pending_actions,
+                                    &mut self.texture_cache,
+                                );
                             });
                     }
                 }

@@ -37,10 +37,14 @@ syntect = ["egui_extras/syntect"]
 ## Enable clipboard access using [`arboard`](https://docs.rs/arboard).
 arboard = ["dep:arboard"]
 
+## Enable SQLite persistent storage for clipboard history.
+persistence = ["dep:rusqlite", "dep:dirs"]
+
 
 [dependencies]
 egui = { workspace = true, default-features = false, features = ["color-hex"] }
 egui_extras = { workspace = true, features = ["image", "svg"] }
+image = { workspace = true, default-features = false, features = ["png"] }
 
 arboard = { version = "3.6", default-features = false, features = ["image-data"], optional = true }
 
@@ -51,6 +55,9 @@ chrono = { workspace = true, optional = true, features = ["js-sys", "wasmbind"] 
 ## Enable this when generating docs.
 document-features = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
+## SQLite database support for persistent storage
+rusqlite = { version = "0.32", features = ["bundled"], optional = true }
+dirs = { version = "6.0", optional = true }
 
 
 [dev-dependencies]
