@@ -106,8 +106,31 @@ impl ItemCardRenderer {
 
     /// Render just the content preview of an item card.
     pub fn render_content_preview(&self, ui: &mut egui::Ui, item: &ClipboardItem) {
-        let preview = item.preview(100);
-        ui.label(egui::RichText::new(preview).small().weak());
+        // If this is an image with data, show a preview
+        if item.image_data.is_some() {
+            // Try to load and display the image
+            let image_handle = ui.ctx().load_texture(
+                format!("clipboard_img_{}", item.timestamp),
+                egui::ColorImage::from_rgba_unmultiplied(
+                    [32, 32], // Placeholder size - actual size would require decoding PNG
+                    &[255; 32 * 32 * 4], // Placeholder: white pixels
+                ),
+                egui::TextureOptions::LINEAR,
+            );
+
+            // Show image thumbnail
+            ui.image((
+                image_handle.id(),
+                egui::Vec2::new(100.0, 100.0),
+            ));
+
+            // Also show metadata
+            ui.label(egui::RichText::new(&item.content).small().weak());
+        } else {
+            // For text items, show text preview
+            let preview = item.preview(100);
+            ui.label(egui::RichText::new(preview).small().weak());
+        }
     }
 
     /// Render just the action buttons of an item card.

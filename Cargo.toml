@@ -14,10 +14,8 @@ members = [
   "crates/epaint",
   "crates/epaint_default_fonts",
 
-  "examples/*",
-  "tests/*",
-
   "xtask",
+  "cliphub",
 ]
 
 [workspace.package]
@@ -42,7 +40,7 @@ panic = "abort" # This leads to better optimizations and smaller binaries (and i
 [profile.dev]
 # Can't leave this on by default, because it breaks the Windows build. Related: https://github.com/rust-lang/cargo/issues/4897
 # split-debuginfo = "unpacked" # faster debug builds on mac
-# opt-level = 1                # Make debug builds run faster
+opt-level = 1                # Make debug builds run faster
 
 # panic = "abort" leads to better optimizations and smaller binaries (and is the default in Wasm anyways),
 # but it also means backtraces don't work with the `backtrace` library (https://github.com/rust-lang/backtrace-rs/issues/397).
@@ -51,7 +49,11 @@ panic = "abort" # This leads to better optimizations and smaller binaries (and i
 
 [profile.dev.package."*"]
 # Optimize all dependencies even in debug builds (does not affect workspace packages):
-opt-level = 2
+opt-level = 3
+# 启用增量编译
+incremental = true
+# 优化代码生成
+codegen-units = 16
 
 
 [workspace.dependencies]

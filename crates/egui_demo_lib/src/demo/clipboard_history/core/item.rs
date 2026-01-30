@@ -221,12 +221,14 @@ pub struct ClipboardItem {
     pub icon: String,
     /// Display title (truncated preview of content)
     pub title: String,
-    /// Full content
+    /// Full content (text description or image metadata)
     pub content: String,
     /// Timestamp string (HH:MM format)
     pub timestamp: String,
     /// Content type classification
     pub content_type: ContentType,
+    /// Image data (PNG bytes) if this is an image item
+    pub image_data: Option<Vec<u8>>,
 }
 
 impl ClipboardItem {
@@ -256,30 +258,32 @@ impl ClipboardItem {
             content,
             timestamp,
             content_type,
+            image_data: None,
         }
     }
 
     /// Create a new [`ClipboardItem`] from image data.
     ///
-    /// Since we don't store actual image data, this creates a placeholder
-    /// with the image dimensions.
+    /// Stores the actual PNG image bytes for preview.
     ///
     /// # Examples
     ///
     /// ```
     /// use clipboard_history::core::item::ClipboardItem;
     ///
-    /// let item = ClipboardItem::from_image(1920, 1080);
+    /// let item = ClipboardItem::from_image(1920, 1080, png_bytes);
     /// assert_eq!(item.icon, "🖼️");
     /// assert!(item.title.contains("1920x1080"));
+    /// assert!(item.image_data.is_some());
     /// ```
-    pub fn from_image(width: u32, height: u32) -> Self {
+    pub fn from_image(width: u32, height: u32, bytes: Vec<u8>) -> Self {
         Self {
             icon: "🖼️".to_string(),
             title: format!("Screenshot ({}x{})", width, height),
-            content: format!("[Image: {}x{} pixels]", width, height),
+            content: format!("[Image: {}x{} pixels, {} KB]", width, height, bytes.len() / 1024),
             timestamp: Self::current_timestamp(),
             content_type: ContentType::Image,
+            image_data: Some(bytes),
         }
     }
 
@@ -308,6 +312,7 @@ impl ClipboardItem {
             content,
             timestamp: Self::current_timestamp(),
             content_type,
+            image_data: None,
         }
     }
 
@@ -464,10 +469,12 @@ mod tests {
 
     #[test]
     fn test_clipboard_item_from_image() {
-        let item = ClipboardItem::from_image(1920, 1080);
+        let bytes = vec![0u8; 1024]; // Fake PNG data
+        let item = ClipboardItem::from_image(1920, 1080, bytes);
         assert_eq!(item.icon, "🖼️");
         assert!(item.title.contains("1920x1080"));
         assert_eq!(item.content_type, ContentType::Image);
+        assert!(item.image_data.is_some());
     }
 
     #[test]

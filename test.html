@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Next-Gen AI Terminal Demo</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --block-bg: #161b22;
+            --accent-color: #58a6ff;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --ai-color: #a371f7;
+            --error-color: #f85149;
+            --success-color: #3fb950;
+            --font-mono: 'Fira Code', 'Courier New', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* 顶部状态栏 (Context Snapshot) */
+        .status-bar {
+            height: 36px;
+            background: #010409;
+            border-bottom: 1px solid #30363d;
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .status-item {
+            margin-right: 16px;
+            display: flex;
+            align-items: center;
+        }
+
+        .status-icon {
+            margin-right: 6px;
+        }
+
+        /* 滚动区域 (History) */
+        .terminal-history {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            scroll-behavior: smooth;
+        }
+
+        /* Block 核心样式 */
+        .block {
+            background: var(--block-bg);
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            overflow: hidden;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .block:hover {
+            border-color: #58a6ff55;
+        }
+
+        /* Block 头部：输入回显 */
+        .block-header {
+            padding: 12px 16px;
+            background: #21262d55;
+            border-bottom: 1px solid #30363d;
+            font-family: var(--font-mono);
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .command-prompt {
+            color: var(--success-color);
+            margin-right: 8px;
+            font-weight: bold;
+        }
+
+        .command-text {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .timestamp {
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        /* Block 内容：输出渲染 */
+        .block-content {
+            padding: 16px;
+            font-family: var(--font-mono);
+            font-size: 13px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            color: var(--text-secondary);
+        }
+
+        /* 特殊渲染：AI 建议卡片 */
+        .ai-card {
+            margin-top: 12px;
+            background: #1f1a2e;
+            border: 1px solid var(--ai-color);
+            border-radius: 6px;
+            padding: 12px;
+            position: relative;
+        }
+
+        .ai-card::before {
+            content: "✨ AI Insight";
+            position: absolute;
+            top: -10px;
+            left: 12px;
+            background: var(--bg-color);
+            color: var(--ai-color);
+            padding: 0 8px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .ai-suggestion {
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .action-btn {
+            background: var(--ai-color);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .action-btn:hover {
+            opacity: 0.9;
+        }
+
+        /* 特殊渲染：JSON 树 */
+        .json-key {
+            color: var(--accent-color);
+        }
+
+        .json-string {
+            color: #a5d6ff;
+        }
+
+        .json-number {
+            color: #79c0ff;
+        }
+
+        /* 底部输入框 (Input Area) */
+        .input-area {
+            background: #161b22;
+            border-top: 1px solid #30363d;
+            padding: 16px;
+        }
+
+        .input-container {
+            display: flex;
+            align-items: center;
+            background: #0d1117;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .input-container:focus-within {
+            border-color: var(--accent-color);
+        }
+
+        .input-prompt {
+            color: var(--success-color);
+            margin-right: 12px;
+            font-weight: bold;
+            font-family: var(--font-mono);
+        }
+
+        #cmd-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: white;
+            font-family: var(--font-mono);
+            font-size: 14px;
+            outline: none;
+        }
+
+        /* 幽灵文字 */
+        #cmd-input::placeholder {
+            color: #484f58;
+            font-style: italic;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="status-bar">
+        <div class="status-item"><span class="status-icon">📁</span> ~/projects/ai-terminal-core</div>
+        <div class="status-item"><span class="status-icon">🌿</span> git:(feature/block-ui)</div>
+        <div class="status-item"><span class="status-icon">📦</span> node: v18.16.0</div>
+        <div class="status-item" style="margin-left: auto;">🤖 AI Context: Active</div>
+    </div>
+
+    <div class="terminal-history" id="history-container">
+        <div class="block">
+            <div class="block-header">
+                <div><span class="command-prompt">AI-Term</span> System Init</div>
+                <span class="timestamp">10:00 AM</span>
+            </div>
+            <div class="block-content">
+                Welcome to Next-Gen AI Terminal.
+                Type <span style="color:var(--ai-color)">/ask</span> to chat with AI, or use standard shell commands.
+            </div>
+        </div>
+    </div>
+
+    <div class="input-area">
+        <div class="input-container">
+            <span class="input-prompt">➜</span>
+            <input type="text" id="cmd-input" placeholder="Type a command or ask AI..." autocomplete="off">
+        </div>
+    </div>
+
+    <script>
+        const input = document.getElementById('cmd-input');
+        const historyContainer = document.getElementById('history-container');
+
+        // 模拟文件系统数据
+        const mockFiles = [
+            { name: "package.json", size: "1.2kb" },
+            { name: "src/", size: "dir" },
+            { name: "README.md", size: "4.5kb" }
+        ];
+
+        input.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                const cmd = input.value.trim();
+                if (cmd) {
+                    processCommand(cmd);
+                    input.value = '';
+                }
+            }
+        });
+
+        // 核心逻辑：意图分发器 (Intent Dispatcher)
+        function processCommand(cmd) {
+            // 1. 创建 Block 骨架
+            const blockId = 'blk_' + Date.now();
+            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            // 2. 意图路由逻辑
+            let type = 'SHELL';
+            if (cmd.startsWith('/')) type = 'CHAT';
+
+            // 3. 渲染 Block 头部
+            let blockHTML = `
+                <div class="block" id="${blockId}">
+                    <div class="block-header">
+                        <div>
+                            <span class="command-prompt">${type === 'CHAT' ? '🤖 AI' : '➜ User'}</span>
+                            <span class="command-text">${cmd}</span>
+                        </div>
+                        <span class="timestamp">${timestamp}</span>
+                    </div>
+                    <div class="block-content" id="${blockId}-content">
+                        <span class="loading">Processing...</span>
+                    </div>
+                </div>
+            `;
+
+            historyContainer.insertAdjacentHTML('beforeend', blockHTML);
+            scrollToBottom();
+
+            // 4. 模拟异步执行与多态渲染
+            setTimeout(() => {
+                const contentEl = document.getElementById(`${blockId}-content`);
+                contentEl.innerHTML = ''; // 清除 Loading
+
+                // === 场景 A: 模拟 JSON 输出 (如 cat package.json) ===
+                if (cmd === 'cat package.json') {
+                    const jsonData = {
+                        "name": "ai-terminal",
+                        "version": "1.0.0",
+                        "dependencies": { "react": "^18.2.0", "ink": "^4.0.0" }
+                    };
+                    contentEl.innerHTML = renderJSON(jsonData);
+                }
+                // === 场景 B: 模拟错误与 AI 修复 (The Magic Moment) ===
+                else if (cmd.includes('deploy') || cmd === 'run build') {
+                    // 模拟 Stderr
+                    contentEl.innerHTML = `<span style="color:var(--error-color)">Error: Build failed with exit code 1</span>\n` +
+                        `Module not found: Can't resolve './utils/logger' in '/src'\n`;
+
+                    // 触发 AI 诊断层
+                    setTimeout(() => {
+                        const aiCard = `
+                            <div class="ai-card">
+                                <div class="ai-suggestion">
+                                    <strong>Diagnosis:</strong> 这是一个典型的路径引用错误。在 <code>src/index.js</code> 中引用了不存在的文件。
+                                </div>
+                                <div class="ai-suggestion">
+                                    <strong>Context:</strong> 我检查了文件树，发现文件名实际上是 <code>Logger.js</code> (区分大小写)。
+                                </div>
+                                <button class="action-btn" onclick="alert('Fix applied: Updated import statement!')">
+                                    🔧 Auto-Fix Import
+                                </button>
+                            </div>
+                        `;
+                        contentEl.insertAdjacentHTML('beforeend', aiCard);
+                        scrollToBottom();
+                    }, 800);
+                }
+                // === 场景 C: 普通 AI 对话 ===
+                else if (type === 'CHAT') {
+                    contentEl.innerHTML = `这里是 AI 对话模式。我已读取当前项目上下文，你可以问我关于代码逻辑的问题。`;
+                }
+                // === 场景 D: 默认 Shell 输出 ===
+                else {
+                    contentEl.textContent = `Executed: ${cmd}\n\n[Mock Output] Standard output stream...`;
+                }
+
+                scrollToBottom();
+            }, 600);
+        }
+
+        // 辅助：简单的 JSON 语法高亮渲染器
+        function renderJSON(obj) {
+            const json = JSON.stringify(obj, null, 2);
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'json-key';
+                    } else {
+                        cls = 'json-string';
+                    }
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        }
+
+        function scrollToBottom() {
+            historyContainer.scrollTop = historyContainer.scrollHeight;
+        }
+    </script>
+</body>
+
+</html>

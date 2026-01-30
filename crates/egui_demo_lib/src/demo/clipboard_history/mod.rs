@@ -120,8 +120,8 @@ impl ClipboardHistory {
     }
 
     /// Add a clipboard item from image data.
-    fn add_image_item(&mut self, width: u32, height: u32) {
-        let item = core::ClipboardItem::from_image(width, height);
+    fn add_image_item(&mut self, width: u32, height: u32, bytes: Vec<u8>) {
+        let item = core::ClipboardItem::from_image(width, height, bytes);
         let _ = self.store.add(item);
     }
 
@@ -137,10 +137,10 @@ impl ClipboardHistory {
         }
 
         // Try image
-        if let Some((width, height)) = self.clipboard.get_image() {
+        if let Some((width, height, bytes)) = self.clipboard.get_image() {
             if self.clipboard.is_new_image(width, height) {
                 self.clipboard.mark_content(format!("IMG_{}x{}", width, height));
-                self.add_image_item(width, height);
+                self.add_image_item(width, height, bytes);
             }
         }
     }
@@ -161,10 +161,10 @@ impl ClipboardHistory {
         }
 
         // Try image
-        if let Some((width, height)) = self.clipboard.get_image() {
+        if let Some((width, height, bytes)) = self.clipboard.get_image() {
             if self.clipboard.is_new_image(width, height) {
                 self.clipboard.mark_content(format!("IMG_{}x{}", width, height));
-                self.add_image_item(width, height);
+                self.add_image_item(width, height, bytes);
             }
         }
     }

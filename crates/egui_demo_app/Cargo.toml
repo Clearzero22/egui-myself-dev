@@ -36,6 +36,9 @@ puffin = ["dep:puffin", "dep:puffin_http", "profiling/profile-with-puffin"]
 serde = ["dep:serde", "egui_demo_lib/serde", "egui/serde"]
 syntect = ["egui_demo_lib/syntect"]
 
+# Clipboard support
+clipboard = []
+
 glow = ["eframe/glow"]
 wgpu = ["eframe/wgpu", "bytemuck", "dep:wgpu"]
 wayland = ["eframe/wayland"]
@@ -45,7 +48,7 @@ x11 = ["eframe/x11"]
 chrono = { workspace = true, features = ["js-sys", "wasmbind"] }
 eframe = { workspace = true, default-features = false, features = ["web_screen_reader"] }
 egui = { workspace = true, features = ["callstack", "default"] }
-egui_demo_lib = { workspace = true, features = ["default", "chrono"] }
+egui_demo_lib = { workspace = true, features = ["default", "chrono", "arboard"] }
 egui_extras = { workspace = true, features = ["default", "image"] }
 image = { workspace = true, default-features = false, features = [
   # Ensure we can display the test images

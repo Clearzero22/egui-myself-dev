@@ -93,8 +93,9 @@ impl ArboardBackend {
             .is_ok()
     }
 
-    /// Get image dimensions from clipboard.
+    /// Get image data from clipboard.
     ///
+    /// Returns `(width, height, bytes)` if the clipboard contains an image.
     /// Returns `None` if the clipboard doesn't contain an image or is inaccessible.
     ///
     /// # Examples
@@ -103,16 +104,16 @@ impl ArboardBackend {
     /// use clipboard_history::clipboard::arboard::ArboardBackend;
     ///
     /// let backend = ArboardBackend::new();
-    /// if let Some((width, height)) = backend.get_image() {
-    ///     println!("Clipboard contains image: {}x{}", width, height);
+    /// if let Some((width, height, bytes)) = backend.get_image() {
+    ///     println!("Clipboard contains image: {}x{} ({} bytes)", width, height, bytes.len());
     /// }
     /// ```
-    pub fn get_image(&self) -> Option<(u32, u32)> {
+    pub fn get_image(&self) -> Option<(u32, u32, Vec<u8>)> {
         let image = arboard::Clipboard::new()
             .ok()?
             .get_image()
             .ok()?;
-        Some((image.width as u32, image.height as u32))
+        Some((image.width as u32, image.height as u32, image.bytes.to_vec()))
     }
 
     /// Check if the given text content is new (different from last seen).
@@ -181,7 +182,7 @@ impl Backend for ArboardBackend {
         }
 
         // Try image
-        if let Some((width, height)) = self.get_image() {
+        if let Some((width, height, _bytes)) = self.get_image() {
             return ClipboardContent::Image { width, height };
         }
 
