@@ -1470,6 +1470,9 @@ dependencies = [
  "rusqlite",
  "serde",
  "unicode_names2",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]

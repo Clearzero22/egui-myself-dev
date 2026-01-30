@@ -137,6 +137,81 @@ pub trait Backend: Send + Sync {
     fn name(&self) -> &str {
         "unknown"
     }
+
+    // -------------------------------------------------------------------------
+    // Helper methods for clipboard operations
+    // These methods provide common functionality used by clipboard_history
+    // -------------------------------------------------------------------------
+
+    /// Get text content from clipboard.
+    ///
+    /// Returns `None` if the clipboard doesn't contain text or is inaccessible.
+    ///
+    /// # Default Implementation
+    ///
+    /// Delegates to [`get_content`] and extracts text if present.
+    fn get_text(&self) -> Option<String> {
+        match self.get_content() {
+            ClipboardContent::Text(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    /// Set text content to clipboard (direct method).
+    ///
+    /// This is an alias for [`set_text`] provided for API compatibility.
+    ///
+    /// # Default Implementation
+    ///
+    /// Delegates to [`set_text`].
+    fn set_text_direct(&self, text: &str) -> bool {
+        self.set_text(text)
+    }
+
+    /// Get image data from clipboard.
+    ///
+    /// Returns `(width, height, png_bytes)` if the clipboard contains an image.
+    /// Returns `None` if the clipboard doesn't contain an image or is not supported.
+    ///
+    /// # Default Implementation
+    ///
+    /// Returns `None` (not supported).
+    fn get_image(&self) -> Option<(u32, u32, Vec<u8>)> {
+        None
+    }
+
+    /// Check if the given text content is new (different from last seen).
+    ///
+    /// This is useful for auto-capture to avoid adding duplicate items.
+    /// Default implementation always returns `true` (no deduplication).
+    ///
+    /// # Default Implementation
+    ///
+    /// Returns `true` (always considered new).
+    fn is_new_content(&self, _content: &str) -> bool {
+        true
+    }
+
+    /// Mark content as seen (for deduplication).
+    ///
+    /// Default implementation does nothing.
+    ///
+    /// # Default Implementation
+    ///
+    /// Does nothing.
+    fn mark_content(&self, _content: String) {}
+
+    /// Check if the given image is new (different from last seen).
+    ///
+    /// This is useful for auto-capture to avoid adding duplicate image items.
+    /// Default implementation always returns `true` (no deduplication).
+    ///
+    /// # Default Implementation
+    ///
+    /// Returns `true` (always considered new).
+    fn is_new_image(&self, _width: u32, _height: u32) -> bool {
+        true
+    }
 }
 
 /// Result type for clipboard operations.

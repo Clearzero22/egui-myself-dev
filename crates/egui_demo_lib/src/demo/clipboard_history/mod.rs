@@ -26,9 +26,15 @@ pub mod clipboard;
 pub mod ui;
 
 use core::{Store, ContentType, MemoryStore};
-use clipboard::ArboardBackend;
+use clipboard::{create_backend, Backend};
 use ui::{DialogManager, ItemCardRenderer, CardAction};
 use std::collections::HashMap;
+
+#[cfg(not(target_arch = "wasm32"))]
+use clipboard::ArboardBackend;
+
+#[cfg(target_arch = "wasm32")]
+use clipboard::WebBackend;
 
 #[cfg(feature = "persistence")]
 use core::SqliteStore;
@@ -82,8 +88,11 @@ pub struct ClipboardHistory {
     /// Storage for clipboard items (persistent)
     #[cfg(feature = "persistence")]
     store: SqliteStore,
-    /// Clipboard backend
+    /// Clipboard backend (desktop: ArboardBackend, WASM: WebBackend)
+    #[cfg(not(target_arch = "wasm32"))]
     clipboard: ArboardBackend,
+    #[cfg(target_arch = "wasm32")]
+    clipboard: WebBackend,
     /// Search query string
     search_query: String,
     /// Current filter mode
@@ -118,7 +127,7 @@ impl ClipboardHistory {
     pub fn new() -> Self {
         Self {
             store: MemoryStore::new(),
-            clipboard: ArboardBackend::new(),
+            clipboard: create_backend(),
             search_query: String::default(),
             filter_mode: FilterMode::default(),
             selected_index: None,
@@ -150,7 +159,7 @@ impl ClipboardHistory {
 
         Self {
             store,
-            clipboard: ArboardBackend::new(),
+            clipboard: create_backend(),
             search_query: String::default(),
             filter_mode: FilterMode::default(),
             selected_index: None,
