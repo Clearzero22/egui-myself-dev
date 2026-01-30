@@ -25,8 +25,8 @@ pub mod core;
 pub mod clipboard;
 pub mod ui;
 
-use core::{Store, MemoryStore, ContentType};
-use clipboard::{ArboardBackend, Backend};
+use core::{Store, ContentType, MemoryStore};
+use clipboard::ArboardBackend;
 use ui::{DialogManager, ItemCardRenderer, CardAction};
 use std::collections::HashMap;
 
@@ -98,6 +98,10 @@ pub struct ClipboardHistory {
     pending_actions: Vec<CardAction>,
     /// Texture cache for images (texture_id -> TextureHandle)
     texture_cache: HashMap<String, egui::TextureHandle>,
+    /// Pagination: current page number (0-based)
+    current_page: usize,
+    /// Pagination: items per page
+    page_size: usize,
 }
 
 impl ClipboardHistory {
@@ -122,6 +126,8 @@ impl ClipboardHistory {
             dialogs: DialogManager::new(),
             pending_actions: Vec::new(),
             texture_cache: HashMap::new(),
+            current_page: 0,
+            page_size: 20,
         }
     }
 
@@ -136,12 +142,14 @@ impl ClipboardHistory {
     /// ```
     #[cfg(feature = "persistence")]
     pub fn new() -> Self {
+        let store = SqliteStore::new().unwrap_or_else(|e| {
+            eprintln!("Failed to initialize persistent storage, using memory: {}", e);
+            // Fallback to in-memory if SQLite fails
+            panic!("Failed to initialize SqliteStore: {}", e);
+        });
+
         Self {
-            store: SqliteStore::new().unwrap_or_else(|e| {
-                eprintln!("Failed to initialize persistent storage, using memory: {}", e);
-                // Fallback to in-memory if SQLite fails
-                panic!("Failed to initialize SqliteStore: {}", e);
-            }),
+            store,
             clipboard: ArboardBackend::new(),
             search_query: String::default(),
             filter_mode: FilterMode::default(),
@@ -150,6 +158,8 @@ impl ClipboardHistory {
             dialogs: DialogManager::new(),
             pending_actions: Vec::new(),
             texture_cache: HashMap::new(),
+            current_page: 0,
+            page_size: 20,
         }
     }
 
@@ -157,6 +167,8 @@ impl ClipboardHistory {
     fn add_clipboard_item(&mut self, content: String) {
         let item = core::ClipboardItem::from_text(content);
         let _ = self.store.add(item);
+        // Reset to page 0 to show new items
+        self.current_page = 0;
     }
 
     /// Add a clipboard item from image data.
@@ -165,6 +177,8 @@ impl ClipboardHistory {
         let item = core::ClipboardItem::from_image(width, height, bytes);
         println!("[DEBUG] Item image_data.is_some(): {}", item.image_data.is_some());
         let _ = self.store.add(item);
+        // Reset to page 0 to show new items
+        self.current_page = 0;
     }
 
     /// Paste current clipboard content.
@@ -230,8 +244,26 @@ impl ClipboardHistory {
         }
     }
 
-    /// Get filtered and searched items.
+    /// Get the total count of filtered items (for pagination).
+    fn filtered_count(&self) -> usize {
+        self.filtered_items_internal().len()
+    }
+
+    /// Get filtered and searched items for the current page.
     fn filtered_items(&self) -> Vec<(usize, core::ClipboardItem)> {
+        let filtered = self.filtered_items_internal();
+
+        // Apply pagination
+        let offset = self.current_page * self.page_size;
+        filtered
+            .into_iter()
+            .skip(offset)
+            .take(self.page_size)
+            .collect()
+    }
+
+    /// Internal helper to get all filtered items (without pagination).
+    fn filtered_items_internal(&self) -> Vec<(usize, core::ClipboardItem)> {
         let all_items = self.store.get_all();
         let allowed_types = self.filter_mode.to_content_types();
 
@@ -249,6 +281,16 @@ impl ClipboardHistory {
                 item.matches_query(&self.search_query)
             })
             .collect()
+    }
+
+    /// Calculate the total number of pages for filtered results.
+    fn total_pages(&self) -> usize {
+        let count = self.filtered_count();
+        if count == 0 {
+            0
+        } else {
+            (count - 1) / self.page_size + 1
+        }
     }
 }
 
@@ -315,6 +357,11 @@ impl crate::View for ClipboardHistory {
         // Search and filter bar
         self.render_search_bar(ui);
 
+        // Pagination controls (only show if there are items)
+        if self.store.len() > 0 {
+            self.render_pagination_controls(ui);
+        }
+
         // Item list
         self.render_item_list(ui);
 
@@ -349,6 +396,9 @@ impl ClipboardHistory {
     }
 
     fn render_search_bar(&mut self, ui: &mut egui::Ui) {
+        let old_filter = self.filter_mode;
+        let old_query = self.search_query.clone();
+
         ui.horizontal(|ui| {
             ui.label("🔍");
             ui.add(
@@ -364,6 +414,72 @@ impl ClipboardHistory {
             ui.radio_value(&mut self.filter_mode, FilterMode::Url, "URLs");
             ui.radio_value(&mut self.filter_mode, FilterMode::Image, "Images");
         });
+
+        // Reset to page 0 when filter or search changes
+        if old_filter != self.filter_mode || old_query != self.search_query {
+            self.current_page = 0;
+        }
+    }
+
+    fn render_pagination_controls(&mut self, ui: &mut egui::Ui) {
+        let total_pages = self.total_pages();
+        let filtered_count = self.filtered_count();
+
+        // Don't show pagination if everything fits on one page
+        if total_pages <= 1 {
+            return;
+        }
+
+        ui.add_space(4.0);
+
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+
+            // Page info
+            let page_info = format!("Page {} / {} ({} items)", self.current_page + 1, total_pages, filtered_count);
+            ui.label(egui::RichText::new(page_info).small());
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                // Next button
+                let has_next = self.current_page + 1 < total_pages;
+                if ui.add_enabled(has_next, egui::Button::new("▶ Next").small()).clicked() {
+                    if has_next {
+                        self.current_page += 1;
+                    }
+                }
+
+                // Previous button
+                let has_prev = self.current_page > 0;
+                if ui.add_enabled(has_prev, egui::Button::new("◀ Prev").small()).clicked() {
+                    if has_prev {
+                        self.current_page = self.current_page.saturating_sub(1);
+                    }
+                }
+
+                // Page size selector
+                ui.separator();
+                ui.label(egui::RichText::new("Per page:").small());
+                let old_page_size = self.page_size;
+                egui::ComboBox::from_id_salt("page_size")
+                    .selected_text(format!("{}", self.page_size))
+                    .width(60.0)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.page_size, 10, "10");
+                        ui.selectable_value(&mut self.page_size, 20, "20");
+                        ui.selectable_value(&mut self.page_size, 50, "50");
+                        ui.selectable_value(&mut self.page_size, 100, "100");
+                    });
+                // Adjust current page if page size changed and we're now out of bounds
+                if old_page_size != self.page_size {
+                    let max_page = self.total_pages().saturating_sub(1);
+                    if self.current_page > max_page {
+                        self.current_page = max_page;
+                    }
+                }
+            });
+        });
+
+        ui.add_space(4.0);
     }
 
     fn render_item_list(&mut self, ui: &mut egui::Ui) {
@@ -390,12 +506,21 @@ impl ClipboardHistory {
                         egui::Frame::NONE
                             .fill(fill)
                             .show(ui, |ui| {
+                                // PERF: Create a load function for lazy image loading
+                                // Currently a placeholder due to borrow checker limitations
+                                let load_fn = move |_: &str| -> Option<Vec<u8>> {
+                                    // TODO: Implement proper lazy loading
+                                    // The texture_cache already handles caching after first load
+                                    None
+                                };
+
                                 card_renderer.render(
                                     ui,
                                     &item,
                                     idx,
                                     &mut self.pending_actions,
                                     &mut self.texture_cache,
+                                    Some(&load_fn),
                                 );
                             });
                     }
@@ -407,14 +532,22 @@ impl ClipboardHistory {
     }
 
     fn render_status_bar(&mut self, ui: &mut egui::Ui) {
-        let filtered_count = self.filtered_items().len();
+        let page_count = self.filtered_items().len();
+        let total_filtered = self.filtered_count();
+        let total_pages = self.total_pages();
 
         ui.horizontal(|ui| {
-            ui.label(format!("Showing {} items", filtered_count));
+            let status = if total_pages > 1 {
+                format!("Page {}/{} · {} items ({} filtered)", self.current_page + 1, total_pages, page_count, total_filtered)
+            } else {
+                format!("Showing {} items", total_filtered)
+            };
+            ui.label(egui::RichText::new(status).small().weak());
 
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button("🗑️ Clear All").clicked() {
                     let _ = self.store.clear();
+                    self.current_page = 0;
                 }
                 if ui.button("📋 Copy Latest").clicked() {
                     if let Some(item) = self.store.get(0) {

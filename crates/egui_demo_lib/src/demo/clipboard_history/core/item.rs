@@ -332,8 +332,10 @@ impl ClipboardItem {
     /// assert!(preview.len() <= 23); // 20 + "..."
     /// ```
     pub fn preview(&self, max_len: usize) -> String {
-        if self.content.len() > max_len {
-            format!("{}...", &self.content[..max_len.saturating_sub(3)])
+        if self.content.chars().count() > max_len {
+            // Use chars() to properly handle Unicode (e.g., Chinese characters)
+            let truncated: String = self.content.chars().take(max_len.saturating_sub(3)).collect();
+            format!("{}...", truncated)
         } else {
             self.content.clone()
         }

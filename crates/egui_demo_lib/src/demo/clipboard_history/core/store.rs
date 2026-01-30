@@ -128,6 +128,42 @@ pub trait Store: Send + Sync {
     /// May return I/O errors for persistent storage backends.
     fn clear(&mut self) -> Result<()>;
 
+    /// Get a page of items with pagination.
+    ///
+    /// This is more efficient than `get_all()` for large datasets.
+    ///
+    /// # Arguments
+    ///
+    /// * `offset` - Number of items to skip (0-based)
+    /// * `limit` - Maximum number of items to return
+    ///
+    /// # Returns
+    ///
+    /// A vector of items in order (most recent first), up to `limit` items.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # use clipboard_history::core::store::Store;
+    /// # use clipboard_history::core::item::ClipboardItem;
+    ///
+    /// fn show_first_page<S: Store>(store: &S) {
+    ///     let page = store.get_page(0, 20);  // First 20 items
+    ///     for item in page {
+    ///         println!("{}", item.title);
+    ///     }
+    /// }
+    /// ```
+    fn get_page(&self, offset: usize, limit: usize) -> Vec<ClipboardItem> {
+        // Default implementation: get all and slice
+        // Persistent stores should override this for efficiency
+        self.get_all()
+            .into_iter()
+            .skip(offset)
+            .take(limit)
+            .collect()
+    }
+
     /// Get the number of items in the store.
     fn len(&self) -> usize;
 

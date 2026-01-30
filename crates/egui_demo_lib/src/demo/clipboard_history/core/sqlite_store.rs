@@ -135,6 +135,56 @@ impl SqliteStore {
         let conn = self.conn.lock().unwrap();
         f(&conn)
     }
+
+    /// Load image data for a specific clipboard item.
+    ///
+    /// This is a separate method from `get()` to allow lazy loading of images.
+    /// Call this when you need to display an image but don't want to load all images upfront.
+    ///
+    /// # Arguments
+    ///
+    /// * `timestamp` - The timestamp of the item to load image for
+    ///
+    /// # Returns
+    ///
+    /// * `Some(Vec<u8>)` - PNG image data if found
+    /// * `None` - If no image exists or loading failed
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use clipboard_history::core::SqliteStore;
+    ///
+    /// let store = SqliteStore::new().unwrap();
+    /// if let Some(png_data) = store.load_image_by_timestamp("12:34") {
+    ///     // Display the image
+    /// }
+    /// ```
+    pub fn load_image_by_timestamp(&self, timestamp: &str) -> Option<Vec<u8>> {
+        self.with_conn(|conn| {
+            match conn.prepare(
+                "SELECT image_path FROM clipboard_items WHERE timestamp = ?1"
+            ) {
+                Ok(mut stmt) => {
+                    match stmt.query([timestamp]) {
+                        Ok(rows) => {
+                            for row_result in rows.mapped(|r| r.get::<_, Option<String>>(0)) {
+                                if let Ok(Some(path)) = row_result {
+                                    if !path.is_empty() {
+                                        let full_path = self.image_manager.get_full_path(&path);
+                                        return std::fs::read(&full_path).ok();
+                                    }
+                                }
+                            }
+                        }
+                        Err(_) => {}
+                    }
+                }
+                Err(_) => {}
+            }
+            None
+        })
+    }
 }
 
 impl Store for SqliteStore {
@@ -257,16 +307,13 @@ impl Store for SqliteStore {
                                 if let Ok((Ok(icon), Ok(title), Ok(content), Ok(timestamp), Ok(content_type_str), Ok(image_path))) = row_result {
                                     let content_type = parse_content_type(&content_type_str);
 
-                                    let image_data = match image_path {
-                                        Some(path) if !path.is_empty() => {
-                                            let full_path = self.image_manager.get_full_path(&path);
-                                            std::fs::read(&full_path).ok()
-                                        },
-                                        _ => None,
-                                    };
+                                    // PERF: 不在这里读取图片数据，只存储路径
+                                    // 图片数据会在需要时由 load_image_for_item() 加载
+                                    let _ = image_path; // 记录路径存在，但不读取
 
                                     items.push(ClipboardItem {
-                                        icon, title, content, timestamp, content_type, image_data,
+                                        icon, title, content, timestamp, content_type,
+                                        image_data: None,  // 延迟加载
                                     });
                                 }
                             }
@@ -304,16 +351,12 @@ impl Store for SqliteStore {
                                 if let Ok((Ok(icon), Ok(title), Ok(content), Ok(timestamp), Ok(content_type_str), Ok(image_path))) = row_result {
                                     let content_type = parse_content_type(&content_type_str);
 
-                                    let image_data = match image_path {
-                                        Some(path) if !path.is_empty() => {
-                                            let full_path = self.image_manager.get_full_path(&path);
-                                            std::fs::read(&full_path).ok()
-                                        },
-                                        _ => None,
-                                    };
+                                    // PERF: 延迟加载图片数据
+                                    let _ = image_path;
 
                                     return Some(ClipboardItem {
-                                        icon, title, content, timestamp, content_type, image_data,
+                                        icon, title, content, timestamp, content_type,
+                                        image_data: None,  // 延迟加载
                                     });
                                 }
                             }
@@ -406,6 +449,50 @@ impl Store for SqliteStore {
             conn.execute("DELETE FROM clipboard_items", [])
                 .map_err(|e| StoreError::Io(format!("Failed to clear table: {}", e)))?;
             Ok(())
+        })
+    }
+
+    fn get_page(&self, offset: usize, limit: usize) -> Vec<ClipboardItem> {
+        self.with_conn(|conn| {
+            match conn.prepare(
+                "SELECT icon, title, content, timestamp, content_type, image_path
+                 FROM clipboard_items
+                 ORDER BY timestamp DESC, id DESC
+                 LIMIT ?1 OFFSET ?2"
+            ) {
+                Ok(mut stmt) => {
+                    match stmt.query([limit as i64, offset as i64]) {
+                        Ok(rows) => {
+                            let mut items = Vec::new();
+                            for row_result in rows.mapped(|r| {
+                                Ok((
+                                    r.get::<_, String>(0),
+                                    r.get::<_, String>(1),
+                                    r.get::<_, String>(2),
+                                    r.get::<_, String>(3),
+                                    r.get::<_, String>(4),
+                                    r.get::<_, Option<String>>(5),
+                                ))
+                            }) {
+                                if let Ok((Ok(icon), Ok(title), Ok(content), Ok(timestamp), Ok(content_type_str), Ok(image_path))) = row_result {
+                                    let content_type = parse_content_type(&content_type_str);
+
+                                    // PERF: 延迟加载图片数据
+                                    let _ = image_path;
+
+                                    items.push(ClipboardItem {
+                                        icon, title, content, timestamp, content_type,
+                                        image_data: None,  // 延迟加载
+                                    });
+                                }
+                            }
+                            items
+                        }
+                        Err(_) => Vec::new()
+                    }
+                }
+                Err(_) => Vec::new()
+            }
         })
     }
 

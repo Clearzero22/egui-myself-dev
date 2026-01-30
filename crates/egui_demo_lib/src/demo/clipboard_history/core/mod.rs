@@ -11,6 +11,9 @@ pub mod item;
 pub mod store;
 pub mod filter;
 
+// Async storage wrapper (always available)
+pub mod async_store;
+
 // Persistent storage modules (requires "persistence" feature)
 #[cfg(feature = "persistence")]
 pub mod image_manager;
@@ -21,6 +24,7 @@ pub mod sqlite_store;
 pub use item::{ClipboardItem, ContentType};
 pub use store::{Store, MemoryStore, Error as StoreError, Result as StoreResult};
 pub use filter::{Filter, FilterBox, TypeFilter, TextSearchFilter, CompositeFilter, LogicOperator};
+pub use async_store::AsyncStore;
 
 // Re-export persistent storage types when feature is enabled
 #[cfg(feature = "persistence")]

@@ -71,6 +71,7 @@ impl ItemCardRenderer {
     /// * `index` - The index of the item (used for edit/delete actions)
     /// * `actions` - A vector to collect any triggered actions
     /// * `texture_cache` - A cache for image textures to avoid reloading
+    /// * `load_image_fn` - Optional callback to load image data on-demand
     ///
     /// # Examples
     ///
@@ -84,11 +85,12 @@ impl ItemCardRenderer {
     ///     ui: &mut egui::Ui,
     ///     item: &ClipboardItem,
     ///     index: usize,
-    ///     texture_cache: &mut HashMap<String, egui::TextureHandle>
+    ///     texture_cache: &mut HashMap<String, egui::TextureHandle>,
+    ///     load_image_fn: impl Fn(&str) -> Option<Vec<u8>>,
     /// ) -> Vec<CardAction> {
     ///     let mut actions = Vec::new();
     ///     let renderer = ItemCardRenderer::new();
-    ///     renderer.render(ui, item, index, &mut actions, texture_cache);
+    ///     renderer.render(ui, item, index, &mut actions, texture_cache, Some(&load_image_fn));
     ///     actions
     /// }
     /// ```
@@ -99,12 +101,13 @@ impl ItemCardRenderer {
         index: usize,
         actions: &mut Vec<CardAction>,
         texture_cache: &mut HashMap<String, egui::TextureHandle>,
+        load_image_fn: Option<&impl Fn(&str) -> Option<Vec<u8>>>,
     ) {
         egui::Frame::NONE
             .inner_margin(egui::Margin::symmetric(8, 4))
             .show(ui, |ui| {
                 self.render_title_row(ui, item);
-                self.render_content_preview(ui, item, texture_cache);
+                self.render_content_preview(ui, item, texture_cache, load_image_fn);
                 ui.separator();
                 self.render_action_buttons(ui, item, index, actions);
             });
@@ -128,12 +131,20 @@ impl ItemCardRenderer {
         ui: &mut egui::Ui,
         item: &ClipboardItem,
         texture_cache: &mut HashMap<String, egui::TextureHandle>,
+        load_image_fn: Option<&impl Fn(&str) -> Option<Vec<u8>>>,
     ) {
         // If this is an image, show a visual indicator
         if item.content_type == ContentType::Image {
             // Try to load and display the actual image
             if let Some(ref png_bytes) = item.image_data {
                 self.render_image_thumbnail(ui, item, png_bytes, texture_cache);
+            } else if let Some(load_fn) = load_image_fn {
+                // PERF: Lazy load image from persistent storage
+                if let Some(png_bytes) = load_fn(&item.timestamp) {
+                    self.render_image_thumbnail(ui, item, &png_bytes, texture_cache);
+                } else {
+                    self.render_image_metadata(ui, item);
+                }
             } else {
                 // Fallback: show image icon and metadata only
                 self.render_image_metadata(ui, item);
