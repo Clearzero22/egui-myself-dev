@@ -42,7 +42,7 @@ arboard = ["dep:arboard"]
 egui = { workspace = true, default-features = false, features = ["color-hex"] }
 egui_extras = { workspace = true, features = ["image", "svg"] }
 
-arboard = { version = "3.6", default-features = false, optional = true }
+arboard = { version = "3.6", default-features = false, features = ["image-data"], optional = true }
 
 unicode_names2.workspace = true # this old version has fewer dependencies
 
