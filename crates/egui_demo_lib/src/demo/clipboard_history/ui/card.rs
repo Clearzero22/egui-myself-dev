@@ -106,26 +106,26 @@ impl ItemCardRenderer {
 
     /// Render just the content preview of an item card.
     pub fn render_content_preview(&self, ui: &mut egui::Ui, item: &ClipboardItem) {
-        // If this is an image with data, show a preview
-        if item.image_data.is_some() {
-            // Try to load and display the image
-            let image_handle = ui.ctx().load_texture(
-                format!("clipboard_img_{}", item.timestamp),
-                egui::ColorImage::from_rgba_unmultiplied(
-                    [32, 32], // Placeholder size - actual size would require decoding PNG
-                    &[255; 32 * 32 * 4], // Placeholder: white pixels
-                ),
-                egui::TextureOptions::LINEAR,
-            );
+        // If this is an image, show a visual indicator
+        if item.content_type == ContentType::Image {
+            // Show image icon and metadata
+            ui.horizontal(|ui| {
+                // Image icon (large)
+                ui.label(egui::RichText::new("🖼️").size(24.0));
 
-            // Show image thumbnail
-            ui.image((
-                image_handle.id(),
-                egui::Vec2::new(100.0, 100.0),
-            ));
+                // Image info
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new(&item.title).strong());
 
-            // Also show metadata
-            ui.label(egui::RichText::new(&item.content).small().weak());
+                    // Show file size if available
+                    if let Some(ref data) = item.image_data {
+                        let size_kb = data.len() / 1024;
+                        ui.label(egui::RichText::new(format!("{} KB", size_kb)).small().weak());
+                    }
+
+                    ui.label(egui::RichText::new(&item.content).small().weak());
+                });
+            });
         } else {
             // For text items, show text preview
             let preview = item.preview(100);
