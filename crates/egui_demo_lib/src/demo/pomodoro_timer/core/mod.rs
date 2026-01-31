@@ -1,5 +1,5 @@
-//! Core layer: Data models, domain logic, and storage abstractions.
+mod config;
+mod error;
 
-pub mod error;
-
-pub use error::{Error, Result};
+pub use config::TimerConfig;
+pub use error::{CoreError, CoreResult};
