@@ -1,4 +1,4 @@
-//! Content handling for Pomodoro timer.
+//! Content pagination and loading.
 
 pub mod pager;
 
