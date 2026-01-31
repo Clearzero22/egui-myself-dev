@@ -1,5 +1,12 @@
 //! Content pagination.
 
+//! # Extension Points
+//!
+//! Implement [`Pager`] trait for custom pagination strategies:
+//! - **MarkdownPager**: Split by headings
+//! - **CodePager**: Split by functions/classes  
+//! - **ImagePager**: Paginate image galleries
+
 use crate::demo::pomodoro_timer::core::error::{Error, Result};
 use std::borrow::Cow;
 
@@ -44,7 +51,9 @@ pub struct TextPager {
 impl TextPager {
     /// Create pager by splitting text into paragraphs per page.
     pub fn by_paragraphs(text: String, paragraphs_per_page: usize) -> Self {
-        let paragraphs: Vec<&str> = text.split("\n\n").filter(|p| !p.is_empty()).collect();
+        let paragraphs: Vec<&str> = text.split("\n\n")
+            .filter(|p| !p.trim().is_empty())
+            .collect();
         let mut pages = Vec::new();
 
         for chunk in paragraphs.chunks(paragraphs_per_page) {
@@ -65,17 +74,16 @@ impl TextPager {
     /// Create pager by splitting text into characters per page.
     pub fn by_chars(text: String, chars_per_page: usize) -> Self {
         let mut pages = Vec::new();
-
-        for chunk in text.as_bytes().chunks(chars_per_page) {
-            if let Ok(s) = std::str::from_utf8(chunk) {
-                pages.push(s.to_string());
-            }
+        let chars: Vec<char> = text.chars().collect();
+        
+        for chunk in chars.chunks(chars_per_page) {
+            pages.push(chunk.iter().collect());
         }
-
+        
         if pages.is_empty() {
             pages.push("No content loaded".to_string());
         }
-
+        
         Self {
             pages,
             current: 0,
