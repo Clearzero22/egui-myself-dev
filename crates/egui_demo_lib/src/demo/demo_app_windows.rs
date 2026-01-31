@@ -101,7 +101,7 @@ impl Default for DemoGroups {
                 Box::<super::widget_gallery::WidgetGallery>::default(),
                 Box::<super::window_options::WindowOptions>::default(),
                 Box::<super::my_demo::MyDemo>::default(),
-                Box::<super::pomodoro_timer::PomodoroTimerDemoApp>::default(),
+                Box::<super::pomodoro_timer::PomodoroTimerApp>::default(),
                 //                Box::<super::clipboard_history::ClipboardHistory>::default(),
             ]),
             tests: DemoGroup::new(vec![

@@ -1,7 +1,7 @@
 //! Timer display component.
 
 use crate::demo::pomodoro_timer::core::{PomodoroTimer, TimerState, Phase};
-use egui::{self, Ui, Color32, RichText, Stroke, vec2};
+use egui::{self, Ui, Color32, RichText, Stroke, vec2, Pos2};
 
 /// Timer display style.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -93,7 +93,7 @@ impl TimerDisplay {
             // Background circle
             painter.circle(center, radius, Color32::TRANSPARENT, stroke);
 
-            // Progress arc
+            // Progress arc using PathShape
             if progress > 0.0 {
                 let color = match timer.state() {
                     TimerState::Running { phase: Phase::Work, .. } => Color32::GREEN,
@@ -105,12 +105,20 @@ impl TimerDisplay {
                 let start_angle = -std::f32::consts::FRAC_PI_2; // Top
                 let end_angle = start_angle + (progress * 2.0 * std::f32::consts::PI);
 
-                painter.arc(
-                    center,
-                    radius,
-                    start_angle..end_angle,
+                // Create arc path
+                let num_segments = 64;
+                let arc_path: Vec<Pos2> = (0..=num_segments)
+                    .map(|i| {
+                        let t = i as f32 / num_segments as f32;
+                        let angle = start_angle + t * (end_angle - start_angle);
+                        center + vec2(angle.cos(), angle.sin()) * radius
+                    })
+                    .collect();
+
+                painter.add(egui::epaint::PathShape::line(
+                    arc_path,
                     Stroke::new(8.0, color),
-                );
+                ));
             }
 
             // Center text
