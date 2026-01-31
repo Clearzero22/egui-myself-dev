@@ -5,7 +5,6 @@
 // ----------------------------------------------------------------------------
 
 pub mod about;
-pub mod clipboard_history;
 pub mod code_editor;
 pub mod code_example;
 pub mod dancing_strings;
@@ -24,6 +23,7 @@ pub mod paint_bezier;
 pub mod painting;
 pub mod panels;
 pub mod password;
+pub mod pomodoro_timer;
 mod popups;
 pub mod scene;
 pub mod screenshot;
