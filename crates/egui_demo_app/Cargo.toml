@@ -48,7 +48,7 @@ x11 = ["eframe/x11"]
 chrono = { workspace = true, features = ["js-sys", "wasmbind"] }
 eframe = { workspace = true, default-features = false, features = ["web_screen_reader"] }
 egui = { workspace = true, features = ["callstack", "default"] }
-egui_demo_lib = { workspace = true, features = ["default", "chrono", "arboard"] }
+egui_demo_lib = { workspace = true, features = ["default", "chrono"] }
 egui_extras = { workspace = true, features = ["default", "image"] }
 image = { workspace = true, default-features = false, features = [
   # Ensure we can display the test images
@@ -81,6 +81,9 @@ serde = { workspace = true, optional = true }
 env_logger = { workspace = true, features = ["auto-color", "humantime"] }
 mimalloc.workspace = true
 rfd = { workspace = true, optional = true }
+
+# Enable clipboard support only on native platforms
+egui_demo_lib = { workspace = true, features = ["default", "chrono", "arboard"] }
 
 # web:
 [target.'cfg(target_arch = "wasm32")'.dependencies]

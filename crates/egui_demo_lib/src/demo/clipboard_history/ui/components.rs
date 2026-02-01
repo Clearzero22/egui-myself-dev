@@ -22,7 +22,7 @@
 pub use button::{ButtonComponent, ButtonProps, ButtonEvent, ButtonStyle, ButtonVariant};
 pub use input::{InputComponent, InputProps, InputEvent, InputType, Validator};
 pub use card::{CardComponent, CardProps, CardTheme};
-pub use icon::{IconComponent, IconProps, Icon};
+pub use icon::{IconComponent, IconProps, Icon, NamedIcon};
 pub use badge::{BadgeComponent, BadgeProps, BadgeVariant};
 pub use divider::{DividerComponent, DividerProps, DividerOrientation};
 
